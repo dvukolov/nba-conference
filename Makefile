@@ -2,7 +2,7 @@ SOURCE = $(wildcard *.tex images/*)
 DOC = report
 
 $(DOC).pdf: $(SOURCE)
-	latexmk -pdf -shell-escape $(DOC).tex
+	latexmk -pdf -shell-escape -interaction=nonstopmode $(DOC).tex
 
 .PHONY: wipe clean distclean watch
 
@@ -17,4 +17,4 @@ distclean: wipe
 	latexmk -C
 
 watch:
-	latexmk -pdf -pvc -shell-escape $(DOC).tex
+	latexmk -pdf -pvc -shell-escape -interaction=nonstopmode $(DOC).tex
