@@ -1,0 +1,76 @@
+arena,elevation,latitude,longitude,timezone_id,timezone_name,utc_offset
+"Air Canada Centre, Toronto, Canada",79.114631652832,43.6434661,-79.3790989,America/Toronto,Eastern Standard Time,-5
+"Alamodome, San Antonio, Texas",200.719131469727,29.4169834,-98.4788143,America/Chicago,Central Standard Time,-6
+"America West Arena, Phoenix, Arizona",331.010162353516,33.4457369,-112.0712006,America/Phoenix,Mountain Standard Time,-7
+"American Airlines Center, Dallas, Texas",129.754516601563,32.7905064,-96.8103549,America/Chicago,Central Standard Time,-6
+"AmericanAirlines Arena, Miami, Florida",1.50129055976868,25.7814014,-80.186969,America/New_York,Eastern Standard Time,-5
+"Amway Arena, Orlando, Florida",32.308910369873,28.5392214,-81.3838535,America/New_York,Eastern Standard Time,-5
+"Amway Center, Orlando, Florida",32.308910369873,28.5392214,-81.3838535,America/New_York,Eastern Standard Time,-5
+"ARCO Arena (II), Sacramento, California",10.3886499404907,38.6490388,-121.5181284,America/Los_Angeles,Pacific Standard Time,-8
+"AT&T Center, San Antonio, Texas",194.279113769531,29.4271471,-98.4374874,America/Chicago,Central Standard Time,-6
+"Bankers Life Fieldhouse, Indianapolis, Indiana",215.415313720703,39.7638867,-86.1554587,America/Indiana/Indianapolis,Eastern Standard Time,-5
+"Barclays Center, Brooklyn, New York",15.4486598968506,40.6826499,-73.9754132,America/New_York,Eastern Standard Time,-5
+"BMO Harris Bradley Center, Milwaukee, Wisconsin",180.730178833008,43.0436598,-87.917138,America/Chicago,Central Standard Time,-6
+"Bradley Center, Milwaukee, Wisconsin",180.730178833008,43.0436598,-87.917138,America/Chicago,Central Standard Time,-6
+"Capital One Arena, Washington, District of Columbia",13.920000076294,38.8980581,-77.0208799,America/New_York,Eastern Standard Time,-5
+"Charlotte Bobcats Arena, Charlotte, North Carolina",219.796478271484,35.2251809,-80.8393037,America/New_York,Eastern Standard Time,-5
+"Charlotte Coliseum, Charlotte, North Carolina",202.979034423828,35.2050394,-80.7952196,America/New_York,Eastern Standard Time,-5
+"Chesapeake Energy Arena, Oklahoma City, Oklahoma",364.396942138672,35.4634175,-97.5151176,America/Chicago,Central Standard Time,-6
+"Compaq Center, Houston, Texas",40.8353576660156,29.9981109,-95.5842855,America/Chicago,Central Standard Time,-6
+"Conseco Fieldhouse, Indianapolis, Indiana",215.415313720703,39.7638867,-86.1554587,America/Indiana/Indianapolis,Eastern Standard Time,-5
+"Continental Airlines Arena, East Rutherford, New Jersey",3.19234561920166,40.8115986,-74.067578,America/New_York,Eastern Standard Time,-5
+"Delta Center, Salt Lake City, Utah",1300.044921875,40.7682681,-111.9010874,America/Denver,Mountain Standard Time,-7
+"EnergySolutions Arena, Salt Lake City, Utah",1300.044921875,40.7682681,-111.9010874,America/Denver,Mountain Standard Time,-7
+"FedEx Forum, Memphis, Tennessee",76.0987319946289,35.1382043,-90.0504735,America/Chicago,Central Standard Time,-6
+"First Union Center, Philadelphia, Pennsylvania",5.59238195419312,39.9012015,-75.1719795,America/New_York,Eastern Standard Time,-5
+"Fiserv Forum, Milwaukee, Wisconsin",180.733581542969,43.0450488,-87.9167961,America/Chicago,Central Standard Time,-6
+"FleetCenter, Boston, Massachusetts",3.03407287597656,42.366198,-71.062146,America/New_York,Eastern Standard Time,-5
+"Ford Center, Oklahoma City, Oklahoma",364.396942138672,35.4634175,-97.5151176,America/Chicago,Central Standard Time,-6
+"General Motors Place, Vancouver, Canada",8.57066154479981,49.2778358,-123.1088227,America/Vancouver,Pacific Standard Time,-8
+"Golden 1 Center, Sacramento, California",7.69048070907593,38.5802045,-121.4996602,America/Los_Angeles,Pacific Standard Time,-8
+"Gund Arena, Cleveland, Ohio",203.840881347656,41.4964797,-81.6882129,America/New_York,Eastern Standard Time,-5
+"Izod Center, East Rutherford, New Jersey",3.19608879089356,40.8116428,-74.0677451,America/New_York,Eastern Standard Time,-5
+"KeyArena at Seattle Center, Seattle, Washington",34.7052345275879,47.6221,-122.353988,America/Los_Angeles,Pacific Standard Time,-8
+"Little Caesars Arena, Detroit, Michigan",185.776916503906,42.341028,-83.0550377,America/Detroit,Eastern Standard Time,-5
+"LLoyd Noble Center, Norman, Oklahoma",350.300323486328,35.1874,-97.443696,America/Chicago,Central Standard Time,-6
+"Madison Square Garden (IV), New York, New York",11.8126087188721,40.7505045,-73.9934387,America/New_York,Eastern Standard Time,-5
+"MCI Center, Washington, District of Columbia",13.920000076294,38.8980581,-77.0208799,America/New_York,Eastern Standard Time,-5
+"Mexico City Arena, Mexico City, Mexico",2238.79174804687,19.4976224,-99.1751227,America/Mexico_City,Central Standard Time,-6
+"Moda Center, Portland, Oregon",28.1796569824219,45.5315651,-122.6668423,America/Los_Angeles,Pacific Standard Time,-8
+"New Orleans Arena, New Orleans, Louisiana",0.693335294723511,29.9490351,-90.0820568,America/Chicago,Central Standard Time,-6
+"Oakland Arena, Oakland, California",5.88350439071655,37.7503024,-122.2029607,America/Los_Angeles,Pacific Standard Time,-8
+"Oklahoma City Arena, Oklahoma City, Oklahoma",364.396942138672,35.4634175,-97.5151176,America/Chicago,Central Standard Time,-6
+"Oracle Arena, Oakland, California",5.88350439071655,37.7503024,-122.2029607,America/Los_Angeles,Pacific Standard Time,-8
+"Pepsi Center, Denver, Colorado",1582.19287109375,39.74866,-105.00771,America/Denver,Mountain Standard Time,-7
+"Pete Maravich Assembly Center, Baton Rouge, Louisiana",6.7670259475708,30.4142761,-91.1846265,America/Chicago,Central Standard Time,-6
+"Philips Arena, Atlanta, Georgia",311.850036621094,33.7572891,-84.3963244,America/New_York,Eastern Standard Time,-5
+"Power Balance Pavilion, Sacramento, California",10.3886499404907,38.6490388,-121.5181284,America/Los_Angeles,Pacific Standard Time,-8
+"Prudential Center, Newark, New Jersey",9.85589408874512,40.7335424,-74.1710255,America/New_York,Eastern Standard Time,-5
+"Pyramid Arena, Memphis, Tennessee",72.0957870483398,35.1562576,-90.0517623,America/Chicago,Central Standard Time,-6
+"Quicken Loans Arena, Cleveland, Ohio",203.840881347656,41.4964797,-81.6882129,America/New_York,Eastern Standard Time,-5
+"Reunion Arena, Dallas, Texas",122.698020935059,32.7739061,-96.8084737,America/Chicago,Central Standard Time,-6
+"Rose Garden Arena, Portland, Oregon",28.1796569824219,45.5315651,-122.6668423,America/Los_Angeles,Pacific Standard Time,-8
+"SBC Center, San Antonio, Texas",194.279113769531,29.4271471,-98.4374874,America/Chicago,Central Standard Time,-6
+"Scotiabank Arena, Toronto, Canada",79.114631652832,43.6434661,-79.3790989,America/Toronto,Eastern Standard Time,-5
+"Sleep Train Arena, Sacramento, California",10.3886499404907,38.6490388,-121.5181284,America/Los_Angeles,Pacific Standard Time,-8
+"Smoothie King Center, New Orleans, Louisiana",0.693335294723511,29.9490351,-90.0820568,America/Chicago,Central Standard Time,-6
+"Spectrum Center, Charlotte, North Carolina",219.796478271484,35.2251809,-80.8393037,America/New_York,Eastern Standard Time,-5
+"STAPLES Center, Los Angeles, California",72.8832626342773,34.0430175,-118.2672541,America/Los_Angeles,Pacific Standard Time,-8
+"State Farm Arena, Atlanta, Georgia",311.850036621094,33.7572891,-84.3963244,America/New_York,Eastern Standard Time,-5
+"Talking Stick Resort Arena, Phoenix, Arizona",331.010162353516,33.4457369,-112.0712006,America/Phoenix,Mountain Standard Time,-7
+"Target Center, Minneapolis, Minnesota",257.495239257812,44.979528,-93.275989,America/Chicago,Central Standard Time,-6
+"TD Banknorth Garden, Boston, Massachusetts",3.03407287597656,42.366198,-71.062146,America/New_York,Eastern Standard Time,-5
+"TD Garden, Boston, Massachusetts",3.03407287597656,42.366198,-71.062146,America/New_York,Eastern Standard Time,-5
+"TD Waterhouse Centre, Orlando, Florida",32.308910369873,28.5392214,-81.3838535,America/New_York,Eastern Standard Time,-5
+"The Arena in Oakland, Oakland, California",5.88350439071655,37.7503024,-122.2029607,America/Los_Angeles,Pacific Standard Time,-8
+"The O2 Arena, London, United Kingdom",5.99699306488037,51.503038,0.0031543,Europe/London,GMT+01:00,1
+"The Palace of Auburn Hills, Auburn Hills, Michigan",292.107879638672,42.6875323,-83.2341028,America/Detroit,Eastern Standard Time,-5
+"Time Warner Cable Arena, Charlotte, North Carolina",219.796478271484,35.2251809,-80.8393037,America/New_York,Eastern Standard Time,-5
+"Toyota Center, Houston, Texas",13.7700147628784,29.7507604,-95.3621005,America/Chicago,Central Standard Time,-6
+"United Center, Chicago, Illinois",180.741455078125,41.8806908,-87.6741759,America/Chicago,Central Standard Time,-6
+"US Airways Center, Phoenix, Arizona",331.010162353516,33.4457369,-112.0712006,America/Phoenix,Mountain Standard Time,-7
+"UW–Milwaukee Panther Arena, Milwaukee, Wisconsin",180.398529052734,43.041675,-87.9168592,America/Chicago,Central Standard Time,-6
+"Verizon Center, Washington, District of Columbia",13.920000076294,38.8980581,-77.0208799,America/New_York,Eastern Standard Time,-5
+"Vivint Smart Home Arena, Salt Lake City, Utah",1300.044921875,40.7682681,-111.9010874,America/Denver,Mountain Standard Time,-7
+"Wachovia Center, Philadelphia, Pennsylvania",5.59238195419312,39.9012015,-75.1719795,America/New_York,Eastern Standard Time,-5
+"Wells Fargo Center, Philadelphia, Pennsylvania",5.59238195419312,39.9012015,-75.1719795,America/New_York,Eastern Standard Time,-5

@@ -1,0 +1,7 @@
+name: scrapy
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - pandas
+  - scrapy

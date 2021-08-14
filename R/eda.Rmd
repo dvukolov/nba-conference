@@ -1,0 +1,727 @@
+---
+title: 'Exploratory Data Analysis'
+output: html_document
+date: "May 1, 2019"
+---
+
+```{r message=FALSE, warning=FALSE}
+library(corrplot)
+library(GGally)
+library(gridExtra)
+library(tidyverse)
+```
+
+#### *Hypothesis: Is there a "bias" in the NBA that allows the Eastern Conference or Western Conference a relatively easier path to success? Is it inherently easier for a team in one conference to be successful than a team in the other conference?*
+
+## Exploratory data analysis
+
+```{r}
+statistics <- read.csv("../data/statistics.csv", stringsAsFactors = FALSE)
+differentials <- read.csv("../data/differentials.csv", stringsAsFactors = FALSE)
+```
+
+
+```{r warning=FALSE, message=FALSE}
+# Calculate consecutive road games played
+statistics %>%
+  mutate(away = case_when(home_team == 1 ~ 0, TRUE ~ 1)) %>%
+  group_by(team, season, ID = data.table::rleid(away == 1)) %>%
+  mutate(consec.Away.games = if_else(away == 1, row_number(), 0L)) %>%
+  ungroup() -> statistics
+
+# Calculate Away team differentials join back to full data set
+metrics <- vars(
+  points, dist_traveled, dist_3days, dist_7days, dist_30days, tz_total_3days, tz_total_7days,
+  tz_total_30days, tz_east_3days, tz_east_7days, tz_east_30days, tz_west_3days, tz_west_7days,
+  tz_west_30days, days_rest, second_backtoback, three_in_four, games_2days, games_3days,
+  games_4days, games_7days, games_30days, road_3days, road_7days, road_30days, total_wins_ly,
+  pyth_40games, pace_40games, ftr_40games, tpar_40games, ts_40games, trb_40games, steal_40games,
+  block_40games, efg_40games, tov_40games, orb_40games, drb_40games, all_nba_ly,
+  first_team_nba_ly, second_team_nba_ly, third_team_nba_ly
+)
+
+df_diff <- statistics %>%
+  group_by(game_id) %>%
+  arrange(desc(home_team), .by_group = TRUE) %>%
+  summarise_at(metrics, diff)
+names(df_diff) <- c("game_id", paste("d", names(df_diff[2:length(df_diff)]), sep = "_"))
+
+# Join back with statistics
+combined <- statistics %>%
+  right_join(df_diff, by = "game_id")
+```
+
+
+Lets start by evaluating the outcomes of games involving Eastern versus Western Conference opponents to see if there is any meaningful pattern that suggests there is a meaningful bias in the favor of one conference versus another. Throughout this exploratory analysis, we will focus on regular season games, excluding playoff contests, as this is where the majority of interconference play occurs, aside from the NBA finals.  
+
+```{r}
+## Interconference Win Percentage
+combined %>%
+  filter(playoff == 0, interconference == 1) %>%
+  group_by(season) %>%
+  mutate(total_games = n_distinct(game_id)) %>%
+  ungroup() %>%
+  group_by(conference, season) %>%
+  mutate(total_wins = sum(win), win_pct = total_wins / total_games) %>%
+  select(season, conference, total_games, total_wins, win_pct) %>%
+  unique() %>%
+  ggplot(aes(x = season, y = win_pct, fill = conference)) +
+  geom_bar(stat = "identity", position = "fill") +
+  labs(y = "Win Percentage") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_hline(yintercept = .5, linetype = "dashed") +
+  scale_fill_discrete(labels = c("Eastern", "Western")) +
+  labs(x = "Season", fill = "Conference") -> plot1
+
+## Interconference Home Win Percentage
+combined %>%
+  filter(playoff == 0, interconference == 1, home_team == 1) %>%
+  group_by(season) %>%
+  mutate(total_games = n_distinct(game_id)) %>%
+  ungroup() %>%
+  group_by(conference, season) %>%
+  mutate(total_wins = sum(win), win_pct = total_wins / total_games) %>%
+  select(season, conference, total_games, total_wins, win_pct) %>%
+  unique() %>%
+  ggplot(aes(x = season, y = win_pct, fill = conference)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(y = "Win Percentage") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_fill_discrete(labels = c("Eastern", "Western")) +
+  labs(fill = "Conference") +
+  ggtitle("Interconference Home Games") -> plot2
+
+## Interconference Road Win Percentage
+combined %>%
+  filter(playoff == 0, interconference == 1, home_team == 0) %>%
+  group_by(season) %>%
+  mutate(total_games = n_distinct(game_id)) %>%
+  ungroup() %>%
+  group_by(conference, season) %>%
+  mutate(total_wins = sum(win), win_pct = total_wins / total_games) %>%
+  select(season, conference, total_games, total_wins, win_pct) %>%
+  unique() %>%
+  ggplot(aes(x = season, y = win_pct, fill = conference)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(y = "Win Percentage") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_fill_discrete(labels = c("Eastern", "Western")) +
+  labs(fill = "Conference") +
+  ggtitle("Interconference Road Games") -> plot3
+
+plot1 + ggtitle("Interconference Regular-Season Games")
+gridExtra::grid.arrange(plot2, plot3, nrow = 2)
+```
+
+```{r, echo=FALSE, eval=TRUE}
+ggsave(file = "../img/ic-games.pdf", plot = plot1, width = 6.5, height = 3)
+```
+
+
+Over the past two decades, the Western conference has consistently outperformed the East in regular season play. Starting in the 2000-01 season, the West has had the higher interconference winning percentage in all but one season. The pattern is most striking within road interconference games, where the East has particularly struggled compared to their Western Conference counterparts.  
+  
+The dominance of the Western Conference over their Eastern Conference foes is driven by an  endless amount of factors, not the least of which is overall team success. In the last 18 seasons, the Western Conference has produced 12 of the last 18 NBA champions. This would suggest that there is an overall talent imbalance in favor of the West.  
+
+```{r warning=FALSE, message=FALSE}
+# NBA Champions by conference
+data.frame(
+  season = c(
+    "2000-01", "2001-02", "2002-03", "2003-04", "2004-05", "2005-06",
+    "2006-07", "2007-08", "2008-09", "2009-10", "2010-11", "2011-12",
+    "2012-13", "2013-14", "2014-15", "2015-16", "2016-17", "2017-18"
+  ),
+  team = c(
+    "Los Angeles Lakers", "Los Angeles Lakers", "San Antonio Spurs",
+    "Detroit Pistons", "San Antonio Spurs", "Miami Heat", "San Antonio Spurs",
+    "Boston Celtics", "Los Angeles Lakers", "Los Angeles Lakers", "Dallas Mavericks",
+    "Miami Heat", "Miami Heat", "San Antonio Spurs", "Golden State Warriors",
+    "Cleveland Cavaliers", "Golden State Warriors", "Golden State Warriors"
+  ),
+  conference = c(
+    "W", "W", "W", "E", "W", "E", "W", "E", "W", "W", "W", "E", "E", "W", "W",
+    "E", "W", "W"
+  )
+) %>%
+  mutate(championships = rep(1, length(conference))) %>%
+  as.data.frame() -> nbaFinals
+
+nbaFinals %>%
+  group_by(conference) %>%
+  summarize(nba_titles = sum(championships)) %>%
+  ggplot(aes(x = conference, y = nba_titles, color = conference, fill = conference)) +
+  geom_bar(stat = "identity") +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  ggtitle("NBA Champions by Conference: 2000-2018")
+```
+  
+In the NBA, there is a known phenomenon called "tanking", where teams with subpar records attempt to lose on purpose in order to improve their draft positioning. In any given year, its possible for more "tanking" teams to exist in one conference versus the other, which could distort any view of conference superiority based on overall interconference record. To combat this, lets look at the outcome of games across conferences between teams with comparable records.
+
+Let's limit our sample of interconference games to matchups between teams who finished the regular season in the same relative position within their conference. For example, lets look at interconference games between the team with the best record in the East versus the best record in the west; the second-best record in the East versus the second-best record in the west; and so-on. While this is not a perfect control, it should give us a more "apples-to-apples"" comparison of if and where one conference is consistently outperforming the other. 
+
+The graph below is an 18-year summary of interconference regular season games between comparable seeds from the 2000-01 through 2018-19 regular season:  
+
+```{r warning=FALSE, message=FALSE}
+## Conference Ranking Based on Regular Season Record
+combined %>%
+  filter(playoff == 0) %>%
+  group_by(season, team, conference) %>%
+  summarize(total_wins = sum(win)) %>%
+  ungroup() %>%
+  group_by(season, conference) %>%
+  arrange(season, conference, desc(total_wins)) %>%
+  mutate(conf_rank = order(total_wins, decreasing = TRUE)) %>%
+  ungroup() %>%
+  select(season, team, conf_rank) %>%
+  unique() %>%
+  as.data.frame() -> confRank
+
+## Map of opponent team name by game_id
+combined %>%
+  select(game_id, team, home_team) %>%
+  unique() %>%
+  mutate(home_away = case_when(home_team == 1 ~ "Home", home_team == 0 ~ "Away")) %>%
+  spread(key = home_away, value = team) %>%
+  group_by(game_id) %>%
+  mutate(Away = max(as.character(Away), na.rm = TRUE), Home = max(as.character(Home), na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(
+    team = case_when(home_team == 0 ~ Away, home_team == 1 ~ Home),
+    opponent = case_when(home_team == 0 ~ Home, home_team == 1 ~ Away)
+  ) %>%
+  select(game_id, team, opponent) %>%
+  unique() %>%
+  as.data.frame() -> opponentMap
+
+# Join back, calculate interconference record by seed
+combined %>%
+  right_join(opponentMap, by = c("game_id", "team")) %>%
+  right_join(confRank, by = c("season", "team")) %>%
+  right_join(confRank, by = c("season" = "season", "opponent" = "team")) %>%
+  rename(conf_rank = conf_rank.x, conf_rank_opp = conf_rank.y) %>%
+  filter(playoff == 0, interconference == 1, conf_rank == conf_rank_opp) %>%
+  group_by(season, conf_rank) %>%
+  mutate(nbr_teams = n_distinct(team)) %>%
+  filter(nbr_teams == 2) %>%
+  # drop cases of uneven teams across conferences
+  mutate(total_games = n_distinct(game_id)) %>%
+  ungroup() %>%
+  group_by(conference, season, conf_rank) %>%
+  mutate(total_wins = sum(win), win_pct = total_wins / total_games) %>%
+  select(season, conference, conf_rank, total_games, total_wins, win_pct) %>%
+  unique() %>%
+  group_by(conference, conf_rank) %>%
+  summarize(games = sum(total_games), wins = sum(total_wins)) %>%
+  mutate(win_pct = (wins / games)) %>%
+  filter(conf_rank != 15) %>%
+  ggplot(aes(x = as.factor(conf_rank), y = wins, fill = conference)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_vline(xintercept = 9.5) +
+  labs(
+    y = "Head-to-Head Wins", x = "Conference Seeding",
+    fill = "Conference"
+  ) +
+  scale_fill_discrete(labels = c("Eastern", "Western")) +
+  ggtitle("Interconference Head-to-Head (2000-2018)") -> plot3
+
+combined %>%
+  right_join(opponentMap, by = c("game_id", "team")) %>%
+  right_join(confRank, by = c("season", "team")) %>%
+  right_join(confRank, by = c("season" = "season", "opponent" = "team")) %>%
+  rename(conf_rank = conf_rank.x, conf_rank_opp = conf_rank.y) %>%
+  filter(playoff == 0, interconference == 1, home_team == 1, conf_rank == conf_rank_opp) %>%
+  group_by(season, conf_rank) %>%
+  mutate(nbr_teams = n_distinct(team)) %>%
+  filter(nbr_teams == 2) %>%
+  # drop cases of uneven teams across conferences
+  mutate(total_games = n_distinct(game_id)) %>%
+  ungroup() %>%
+  group_by(conference, season, conf_rank) %>%
+  mutate(total_wins = sum(win), win_pct = total_wins / total_games) %>%
+  select(season, conference, conf_rank, total_games, total_wins, win_pct) %>%
+  unique() %>%
+  group_by(conference, conf_rank) %>%
+  summarize(games = sum(total_games), wins = sum(total_wins)) %>%
+  mutate(win_pct = (wins / games)) %>%
+  filter(conf_rank != 15) %>%
+  ggplot(aes(x = as.factor(conf_rank), y = wins, fill = conference)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_vline(xintercept = 9.5) +
+  labs(
+    y = "Head-to-Head Wins", x = "Conference Seeding",
+    fill = "Conference"
+  ) +
+  scale_fill_discrete(labels = c("Eastern", "Western")) +
+  ggtitle("Interconference Head-to-Head: Home Games (2000-2018)") -> plot4
+
+gridExtra::grid.arrange(plot3, plot4, nrow = 2)
+```
+
+```{r, include=FALSE, eval=TRUE}
+plot2 <- gridExtra::grid.arrange(plot3, plot4, nrow = 2)
+ggsave(file = "../img/ic-hth.pdf", plot = plot2, width = 6.5)
+```
+  
+From this view, we can see that Western Conference teams have owned the head-to-head matchups versus the East within seeds 2-through-9, which almost exactly equates to the NBA playoff format (seeded 1-through-8). From this standpoint, the West has clearly been the dominant conference among playoff eligible teams for the past 18 seasons.  There has, however, been more parity between the number one seeded teams, which makes some sense given that the East has crowned six NBA champions since 2000.  
+  
+Another way to evaluate relative performance of one conference versus another is using point differential. Point differential is defined as the difference between points scored and points allowed, where a positive number reflects a winning outcome and negative point differential indicates a losing outcome. This metric is beneficial for use in regression analysis for several reasons:  
+
+1. It is a continuous variable well-suited for linear regression  
+2. It can measure the impact of winning and losing as well as more extreme outcomes  
+3. Differences often eliminate serial correlation within the data  
+4. It is easy to interpret! (positive=win, negative=loss)   
+
+As we can see from the plots below, the point differential for the Western Conference versus the Eastern conference exhibits the same pattern of Western dominance. Within interconference regular season games, the West won the combined point differential battle in 17 of the last 18 seasons (excluding 2008-09 which had only 66 regular season games). However, the Western Conference point-differential has declined since its peak in 2013-14, as Eastern Conference teams have become more competitive, particularly on the road. The pattern is almost sinusoidal which begs the question of whether this is a cyclical pattern.  
+
+```{r warning=FALSE, message=FALSE}
+## Interconference Point Differential
+combined %>%
+  select(game_id, team, points) %>%
+  group_by(game_id, team) %>%
+  summarize(points = sum(points)) %>%
+  right_join(opponentMap, by = c("game_id", "team")) %>%
+  left_join(combined[, c("game_id", "team", "points")],
+    by = c("game_id" = "game_id", "opponent" = "team")
+  ) %>%
+  rename(
+    points = points.x,
+    opp_points = points.y
+  ) %>%
+  mutate(d_points = points - opp_points) %>%
+  left_join(combined[, c("season", "game_id", "team", "conference", "playoff", "interconference")],
+    by = c("game_id" = "game_id", "team" = "team")
+  ) %>%
+  filter(
+    playoff == 0, interconference == 1, conference == "W",
+    season != "2011-12"
+  ) %>%
+  group_by(season) %>%
+  summarize(d_points = sum(d_points)) %>%
+  ungroup() %>%
+  mutate(cat = case_when(d_points < 0 ~ "negative", d_points > 0 ~ "positive")) %>%
+  ggplot(aes(x = season, y = d_points)) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = 0, size = 1) +
+  labs(y = "Point Differential", x = "Season") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("West Point Differential vs. East: 2000-2018") -> plot1
+
+## Interconference Home Point Differential
+combined %>%
+  select(game_id, team, points) %>%
+  group_by(game_id, team) %>%
+  summarize(points = sum(points)) %>%
+  right_join(opponentMap, by = c("game_id", "team")) %>%
+  left_join(combined[, c("game_id", "team", "points")],
+    by = c("game_id" = "game_id", "opponent" = "team")
+  ) %>%
+  rename(
+    points = points.x,
+    opp_points = points.y
+  ) %>%
+  mutate(d_points = points - opp_points) %>%
+  left_join(combined[, c(
+    "season", "game_id", "team", "home_team",
+    "conference", "playoff", "interconference"
+  )],
+  by = c("game_id" = "game_id", "team" = "team")
+  ) %>%
+  filter(
+    playoff == 0, interconference == 1, conference == "W",
+    season != "2011-12", home_team == 1
+  ) %>%
+  group_by(season) %>%
+  summarize(d_points = sum(d_points)) %>%
+  ungroup() %>%
+  mutate(cat = case_when(d_points < 0 ~ "negative", d_points > 0 ~ "positive")) %>%
+  ggplot(aes(x = season, y = d_points)) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = 0, size = 1) +
+  labs(y = "Point Differential", x = "Season") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("West Point Differential vs. East (Home): 2000-2018") -> plot2
+
+## Interconference Home Point Differential
+combined %>%
+  select(game_id, team, points) %>%
+  group_by(game_id, team) %>%
+  summarize(points = sum(points)) %>%
+  right_join(opponentMap, by = c("game_id", "team")) %>%
+  left_join(combined[, c("game_id", "team", "points")],
+    by = c("game_id" = "game_id", "opponent" = "team")
+  ) %>%
+  rename(
+    points = points.x,
+    opp_points = points.y
+  ) %>%
+  mutate(d_points = points - opp_points) %>%
+  left_join(combined[, c(
+    "season", "game_id", "team", "home_team",
+    "conference", "playoff", "interconference"
+  )],
+  by = c("game_id" = "game_id", "team" = "team")
+  ) %>%
+  filter(
+    playoff == 0, interconference == 1, conference == "W",
+    season != "2011-12", home_team == 0
+  ) %>%
+  group_by(season) %>%
+  summarize(d_points = sum(d_points)) %>%
+  ungroup() %>%
+  mutate(cat = case_when(d_points < 0 ~ "negative", d_points > 0 ~ "positive")) %>%
+  ggplot(aes(x = season, y = d_points)) +
+  geom_bar(stat = "identity") +
+  geom_hline(yintercept = 0, size = 1) +
+  labs(y = "Point Differential", x = "Season") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("West Point Differential vs. East (Away): 2000-2018") -> plot3
+
+plot1
+gridExtra::grid.arrange(plot2, plot3, nrow = 2)
+```
+  
+```{r, include=FALSE, eval=TRUE}
+plot_right <- gridExtra::grid.arrange(plot2, plot3, nrow = 2)
+plot_full <- gridExtra::grid.arrange(plot1, plot_right, ncol = 2)
+ggsave(file = "../img/point-diff.pdf", plot = plot_full, width = 10, height = 4.5)
+```
+
+The map pictured below depicts the home arena locations for all 30 NBA teams, and the 8 franchises that have won the NBA title since the turn of the century (in gold). The locations of these title-winning franchises are scattered along the periphery of the U.S. border. Along with possessing superior talent, its fair to ask whether these franchises have benefited from their geographical locations. Does the amount of travel required to reach these locations have a negative effect on their opponents performance?
+
+```{r message=FALSE}
+## Get coordinates for each NBA arena
+# plot most recent one for illustration
+arenas <- read_csv("../data/arenas.csv")
+nbaFinals %>%
+  select(team) %>%
+  unique() %>%
+  mutate(titleFlg = 1, team = as.character(team)) %>%
+  as.data.frame() -> teamTitleList
+combined %>%
+  filter(home_team == 1, playoff == 0, season == "2018-19") %>%
+  group_by(team) %>%
+  arrange(desc(date)) %>%
+  filter(row_number() == 1) %>%
+  mutate(abbr = substr(game_id, nchar(game_id) - 2, nchar(game_id))) %>%
+  select(team, abbr, current_location) %>%
+  unique() %>%
+  left_join(arenas[, c("arena", "longitude", "latitude")],
+    by = c("current_location" = "arena")
+  ) %>%
+  left_join(teamTitleList, by = "team") %>%
+  mutate(titleFlg = replace_na(titleFlg, 0)) %>%
+  as.data.frame() -> arenaCoord
+arenaCoord %>% filter(titleFlg == 1) -> titleTeams
+arenaCoord %>% filter(titleFlg == 0) -> xtitleTeams
+
+## Map of last 18 NBA champions
+usa <- map_data("usa")
+p <- ggplot() +
+  geom_polygon(data = usa, aes(x = long, y = lat, group = group), fill = "gray") +
+  coord_quickmap() +
+  geom_point(data = xtitleTeams, aes(x = longitude, y = latitude), color = "black", size = 3) +
+  geom_point(data = xtitleTeams, aes(x = longitude, y = latitude), color = "black", size = 3) +
+  geom_point(data = titleTeams, aes(x = longitude, y = latitude), color = "black", size = 5) +
+  geom_point(data = titleTeams, aes(x = longitude, y = latitude), color = "yellow", size = 4) +
+  geom_text(
+    data = titleTeams, aes(x = longitude, y = latitude, label = abbr), size = 2.5,
+    vjust = 1.5, hjust = 1.5, color = "black"
+  ) +
+  theme_void()
+p + labs(title = "Home Arena Locations for All 30 NBA Teams")
+```
+```{r, echo=FALSE, message=FALSE, eval=TRUE}
+ggsave(file = "../img/home-arenas.pdf", plot = p, height = 3.5)
+```
+  
+```{r message=FALSE}
+itinerary <- read_csv("../data/itinerary.csv") %>%
+  select(-longitude) %>%
+  left_join(arenas, by = c("current_location" = "arena")) %>%
+  select(date, team, current_location, latitude, longitude) %>%
+  filter(team == "Boston Celtics", date >= "2018-10-16") %>% # , date <= "2018-12-27") %>%
+  mutate(latitude_next = lead(latitude), longitude_next = lead(longitude)) %>%
+  filter(latitude != latitude_next, longitude != longitude_next) %>%
+  na.omit()
+```
+  
+  
+```{r}
+p <- ggplot() +
+  geom_polygon(data = usa, aes(x = long, y = lat, group = group), fill = "gray") +
+  geom_curve(
+    data = itinerary, aes(x = longitude, y = latitude, xend = longitude_next, yend = latitude_next, color = "red"),
+    curvature = -0.2, arrow = arrow(length = unit(0.01, "npc")), show.legend = F
+  ) +
+  coord_quickmap(expand = FALSE) +
+  theme_void()
+p + labs(title = "Boston Celtics Itinerary for the 2018-19 Season")
+```
+
+```{r, echo=FALSE, message=FALSE, eval=TRUE}
+ggsave(file = "../img/bc-itinerary.pdf", plot = p, height = 4)
+```
+
+## Travel by conference
+
+In order to answer the question posed above, lets examine the amount of travel undertaken by each team over the course of a season, and over the course of several seasons.  
+
+
+```{r fig.width=9, warning=FALSE, message=FALSE}
+abbr <- read_csv("../data/team-abbr.csv") %>%
+  select(long_name, alt_abbr) %>%
+  rename(team = long_name, abbr = alt_abbr)
+
+statistics %>%
+  left_join(abbr, by = "team") %>%
+  filter(season == "2017-18") %>%
+  group_by(conference, abbr) %>%
+  summarise(total_dist_traveled = sum(dist_traveled)) %>%
+  ungroup() %>%
+  mutate(
+    team_sorted = reorder(abbr, total_dist_traveled),
+    conference_label = factor(conference,
+      levels = c("E", "W"),
+      labels = c("Eastern Conference", "Western Conference")
+    )
+  ) %>%
+  ggplot(aes(x = team_sorted, y = total_dist_traveled / 1e3, fill = conference)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  facet_wrap(~conference_label, scale = "free_x") +
+  labs(x = NULL, y = "Thousand kilometers") -> plot1
+
+statistics %>%
+  left_join(abbr, by = "team") %>%
+  filter(season == "2017-18", playoff == 0) %>%
+  mutate(
+    team_sorted = reorder(abbr, dist_traveled, median),
+    conference_label = factor(conference,
+      levels = c("E", "W"),
+      labels = c("Eastern Conference", "Western Conference")
+    )
+  ) %>%
+  ggplot(aes(x = team_sorted, y = dist_traveled / 1e3, colour = conference)) +
+  geom_boxplot(show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  facet_wrap(~conference_label, scale = "free_x") +
+  labs(x = NULL, y = "Thousand kilometers") -> plot2
+
+plot1 + ggtitle("Total Distance Traveled in 2017-2018")
+plot2 + ggtitle("Distribution of Distance Traveled in 2017-2018")
+```
+  
+```{r, echo=FALSE, eval=TRUE}
+ggsave(file = "../img/dist-total.pdf", plot = plot1, width = 7, height = 3)
+ggsave(file = "../img/dist-distrib.pdf", plot = plot2, width = 7, height = 3)
+```
+  
+The two plots above show the *total distance traveled* and the *distribution of total distance traveled* for each team during the 2017-18 regular season. Generally speaking, the Western Conference teams traveled more than the East both in total, and in frequency of long-distance trips. From the plot on the left, we can see that overall distance traveled is generally higher when comparing East vs. West in ascending order of total travel distance. On the left, the height the interquartile range for the Western conference teams is higher than that of the East, which means the Western conference team have more frequent long-distance trips, while the East has fewer long-distance trips but which are more extreme in distance traveled (see outliers).  
+  
+When regressing total distance traveled on a conference indicator variable (equivalent to a two-sample t-test), we conclude that Western conference teams traveled more than Eastern conference teams in the 2017-18 season. 
+
+```{r warning=FALSE, message=FALSE}
+cumulative_travel <- statistics %>%
+  filter(season == "2017-18") %>%
+  group_by(conference, team) %>%
+  summarise(total_dist_traveled = sum(dist_traveled)) %>%
+  ungroup()
+
+summary(lm(total_dist_traveled ~ conference, data = cumulative_travel))
+```
+
+This conclusion also holds when looking at distance traveled by conference over the last 18 regular seasons. This patterns shows that Western Conference teams consistently travel more than Eastern Conference teams on a year-to-year basis.  
+
+```{r warning=FALSE, message=FALSE}
+statistics %>%
+  filter(playoff == 0) %>%
+  group_by(season, conference) %>%
+  summarise(total_dist_traveled = sum(dist_traveled)) %>%
+  ggplot(aes(x = season, y = total_dist_traveled / 1e6, group = conference, colour = conference)) +
+  geom_point() +
+  geom_line(size = 0.75) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_color_discrete(labels = c("Eastern", "Western")) +
+  labs(
+    x = "Season", y = "Million kilometers",
+    colour = "Conference"
+  ) -> plot7
+
+plot7 + ggtitle("Total Distance Traveled by Conference")
+```
+
+```{r, echo=FALSE, eval=TRUE}
+ggsave(file = "../img/dist-conf.pdf", plot = plot7, width = 6, height = 3)
+```
+
+## Interconference games  
+
+While the West does travel more than the East over a full regular season, the travel distance between conferences is much closer within interconference games. This makes sense in practice, as these teams are traveling to each other once a year, so the travel distance should largely cancel each other out.  
+
+```{r warning=FALSE, message=FALSE}
+statistics %>%
+  filter(playoff == 0, interconference == 1) %>%
+  group_by(season, conference) %>%
+  summarise(total_dist_traveled = sum(dist_traveled)) %>%
+  ggplot(aes(x = season, y = total_dist_traveled / 1e6, group = conference, colour = conference)) +
+  geom_point() +
+  geom_line(size = 0.75) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_color_discrete(labels = c("Eastern", "Western")) +
+  labs(
+    x = "Season", y = "Million kilometers",
+    colour = "Conference"
+  ) -> plot8
+
+plot8 + ggtitle("Interconference Distance Traveled by Conference")
+```
+
+```{r, echo=FALSE, eval=TRUE}
+ggsave(file = "../img/dist-ic.pdf", plot = plot8, width = 6, height = 3)
+```
+  
+However, while the distance traveled to get to a interconference game may be the same, the total distance traveled over a 3-day and 7-day period is not the same across conferences. When playing an interconference game, the Western Conference consistenly travels more than the Eastern Conference over a 3-day and 7-day period, as evidenced by the charts below.  
+
+```{r warning=FALSE, message=FALSE}
+statistics %>%
+  filter(playoff == 0, interconference == 1) %>%
+  group_by(season, conference) %>%
+  summarise(total_dist_traveled = sum(dist_3days)) %>%
+  ggplot(aes(x = season, y = total_dist_traveled / 1e6, group = conference, colour = conference)) +
+  geom_point() +
+  geom_line(size = 0.75) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_color_discrete(labels = c("Eastern", "Western")) +
+  labs(
+    title = "Interconference Distance Traveled in 3 Days",
+    x = "Season", y = "Million km",
+    colour = "Conference"
+  ) -> plot1
+
+
+statistics %>%
+  filter(playoff == 0, interconference == 1) %>%
+  group_by(season, conference) %>%
+  summarise(total_dist_traveled = sum(dist_7days)) %>%
+  ggplot(aes(x = season, y = total_dist_traveled / 1e6, group = conference, colour = conference)) +
+  geom_point() +
+  geom_line(size = 0.75) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_color_discrete(labels = c("Eastern", "Western")) +
+  labs(
+    title = "Interconference Distance Traveled in 7 Days",
+    x = "Season", y = "Million km",
+    colour = "Conference"
+  ) -> plot2
+
+grid.arrange(plot1, plot2, nrow = 2)
+```
+ 
+```{r, include=FALSE, eval=TRUE}
+plot9 <- grid.arrange(plot1, plot2, nrow = 2)
+ggsave(file = "../img/dist-ic-days.pdf", plot = plot9, width = 6.5)
+```
+
+
+```{r}
+statistics %>%
+  filter(interconference == 1, playoff == 0) %>%
+  group_by(game_id) %>%
+  ggplot(aes(x = tz_traveled, colour = conference)) +
+  geom_density(size = 0.75) +
+  coord_cartesian(xlim = c(-4, 4)) +
+  scale_color_discrete(labels = c("Eastern", "Western")) +
+  labs(
+    title = "Distribution of Time Zones Traveled to Each Interconference Game",
+    x = "Time Zones Traveled", colour = "Conference"
+  )
+```
+
+```{r}
+statistics %>%
+  filter(interconference == 1) %>%
+  group_by(game_id) %>%
+  ggplot(aes(x = dist_traveled, colour = conference)) +
+  geom_density(size = 0.75) +
+  coord_cartesian(xlim = c(0, 5000)) +
+  scale_color_discrete(labels = c("Eastern", "Western")) +
+  labs(
+    title = "Distribution of Distance Traveled to Each Interconference Game",
+    x = "Distance Traveled (kilometers)", colour = "Conference"
+  )
+```
+
+```{r warning=FALSE, message=FALSE}
+statistics %>%
+  filter(interconference == 1) %>%
+  group_by(season, conference) %>%
+  summarise(total_dist_traveled = sum(dist_traveled)) %>%
+  ggplot(aes(x = season, y = total_dist_traveled / 1e3, group = conference, colour = conference)) +
+  geom_point() +
+  geom_line(size = 0.75) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_color_discrete(labels = c("Eastern", "Western")) +
+  labs(
+    title = "Total Distance Traveled to Each Interconference Game",
+    x = "Season", y = "Total Distance Traveled (thousand kilometers)",
+    colour = "Conference"
+  )
+```
+
+## Analysis of schedule
+
+Again, the analysis of variables related to game schedule can be performed on the full dataset, or on a subset of it that only includes interconference games.
+
+
+## Regression predictors and the response
+
+Additional evaluation of the `differentials` dataset is useful to prepare for the actual model building:
+  
+  * assess the linear nature of the relationships between the predictors, as well as between the predictors and the response
+  * look for the need of variable transformations (seems like none are needed)
+  * and identify potential outliers (a couple are present, but probably not critical)
+  * investigate pairwise correlation between the predictors, the predictors and the response
+
+The number of predictors in the `differentials` dataset is quite large, so we may need to pick just some of them to illustrate the point.
+
+```{r fig.width=8, fig.height=7}
+columns <- c("tz_traveled", "lon_traveled", "dist_traveled", "days_rest", "pyth_40games", "points")
+ggpairs(differentials, columns = columns, aes(colour = conference))
+```
+
+The majority of predictors demonstrate weak correlation with the response (the very first row and column). It may be best to limit the number of variables on the correlation plot to the ones higher than a certain threshold (not yet implemented):
+
+```{r}
+plot_labels <- FALSE
+numeric_attributes <- differentials %>%
+  select(-points, -win, -game_id, -season, -date, -conference) %>%
+  names()
+numeric_attributes <- c("points", numeric_attributes)
+
+cor(differentials[numeric_attributes]) %>% corrplot(tl.pos = plot_labels)
+```
+
+## Tests for the mean and the proportion
+
+As a result of randomized assignment, the point differential between the *observed* and the *baseline* teams is not significantly different from zero: 
+
+```{r}
+t.test(differentials$points)
+```
+
+The same is true for the proportion of wins, the confidence interval for which includes 50%:
+
+```{r}
+prop.test(table(differentials$win))
+```
+
+Conference is equally distributed in the dataset: 
+
+```{r}
+table(differentials$conference)
+```

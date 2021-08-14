@@ -1,0 +1,390 @@
+---
+title: "NBA Data Processing"
+date: "May 1, 2019"
+output: html_document
+---
+
+```{r, message=FALSE}
+library(tidyverse)
+library(zoo)
+```
+
+# Merge the tables
+
+First, we load the games data, create a couple of additional indicators and reshape the data into a long format:
+
+
+```{r message=FALSE}
+games <- read_csv("../data/games.csv")
+
+games <- games %>%
+  mutate(
+    # A unique identifier will later be used to compute the differentials for each game
+    game_id = paste(date, road_team_abbr, home_team_abbr),
+    home_win = as.numeric((home_team_pts - road_team_pts) > 0)
+  ) %>%
+  gather(team_type, team, road_team, home_team) %>%
+  mutate(
+    # Home vs road team as a dummy variable
+    home_team = as.numeric(team_type == "home_team"),
+    # Populate the win dummy for each team
+    win = if_else(home_team == 1, home_win, 1 - home_win),
+    # Collect the points into a single variable
+    points = if_else(home_team == 1, home_team_pts, road_team_pts),
+    # Temporary opponent points to calculate Pythagorean wins
+    points_opp = if_else(home_team == 1, road_team_pts, home_team_pts)
+  ) %>%
+  select(game_id, season, date, team, home_team, playoff = playoff_gm, win, points, points_opp)
+```
+
+Then we load multiple tables related to the itinerary of each team and join those together:
+
+```{r message=FALSE}
+itinerary <- read_csv("../data/itinerary.csv")
+distance <- read_csv("../data/distance.csv")
+driving <- read_csv("../data/driving.csv")
+
+itinerary <- itinerary %>%
+  left_join(distance, by = c("previous_location" = "origin", "current_location" = "destination")) %>%
+  left_join(driving, by = c("previous_location" = "origin", "current_location" = "destination"))
+```
+
+Finally, we load the all-NBA and performance data and combine everything together:
+
+```{r message=FALSE}
+# Load just the lagged versions of all-NBA indicators
+allnba <- read_csv("../data/all-nba.csv") %>%
+  select(-season, -game_team_abbr)
+
+performance <- read_csv("../data/performance.csv")
+
+df <- games %>%
+  inner_join(performance, by = c("date", "team")) %>%
+  left_join(allnba, by = c("date", "team" = "team_name")) %>%
+  replace(is.na(.), 0) %>%
+  inner_join(itinerary, by = c("date", "team"))
+```
+
+# Compute the statistics
+
+To calculate any kind of statistics within a certain time period (e.g. distance traveled last week), we will convert the dataframe to a regularly spaced format, where missing dates are explicitly filled with NA:
+
+```{r}
+df_regular <- df %>%
+  # Compute the metrics for each season of each team
+  group_by(season, team) %>%
+  arrange(date, .by_group = TRUE) %>%
+  mutate(
+    # Create temporary helper indicators
+    games_played = 1,
+    road_game = home_team == 0,
+
+    # Direction of travel (East / West / None). North vs South is not considered.
+    direction = case_when(
+      lon_traveled > 0 ~ "East",
+      lon_traveled < 0 ~ "West",
+      TRUE ~ "None"
+    ),
+    days_rest = as.numeric(date - lag(date) - 1),
+    # Set number of days of rest at the beginning of each season to 10 days
+    days_rest = replace_na(days_rest, 10)
+  ) %>%
+  # Fill implicit gaps in the dates with explicit missing values
+  # to obtain a regular time series:
+  complete(date = seq.Date(min(date), max(date), by = "day"))
+```
+
+Several helper functions will come in handy:
+
+```{r}
+roll_sum <- function(x, n, ...) {
+  rollapply(x, n, sum, na.rm = TRUE, align = "right", partial = TRUE, ...)
+}
+
+roll_mean <- function(x, n, ...) {
+  rollapply(x, n, mean, na.rm = TRUE, align = "right", partial = TRUE, ...)
+}
+```
+
+Next, we create travel- and schedule-related predictor variables. The majority of those are currently computed as rolling sums. Feel free to change the code as you see fit (use weighted averages, different time spans, other metrics, etc.):
+
+```{r}
+df_metrics <- df_regular %>%
+  mutate(
+    # Number of games played within the last N days (including the current game)
+    games_2days = roll_sum(games_played, 2),
+    games_3days = roll_sum(games_played, 3),
+    games_4days = roll_sum(games_played, 4),
+    games_7days = roll_sum(games_played, 7),
+    games_30days = roll_sum(games_played, 30),
+
+    # The second of back-to-back games
+    second_backtoback = as.numeric(games_2days == 2),
+
+    # Three games in four nights
+    three_in_four = as.numeric(games_4days == 3),
+
+    # Number of road games played within the last N days
+    road_3days = roll_sum(road_game, 3),
+    road_7days = roll_sum(road_game, 7),
+    road_30days = roll_sum(road_game, 30),
+
+    # Number of games played within the same time zone for the past N days
+    same_tz_3days = roll_sum(tz_traveled == 0, 3),
+    same_tz_7days = roll_sum(tz_traveled == 0, 7),
+    same_tz_30days = roll_sum(tz_traveled == 0, 30),
+
+    # Assume that the team is driving if the distance is short
+    # (less than 200 miles), and flying otherwise:
+    dist_traveled = if_else(driving_distance <= 200 * 1.60934,
+      driving_distance, direct_distance
+    ),
+
+    # Distance traveled within the last N days (in kilometers)
+    dist_3days = roll_sum(dist_traveled, 3),
+    dist_7days = roll_sum(dist_traveled, 7),
+    dist_30days = roll_sum(dist_traveled, 30),
+
+    # Number of time zones traveled within the last N days (sum of absolute values)
+    tz_total_3days = roll_sum(abs(tz_traveled), 3),
+    tz_total_7days = roll_sum(abs(tz_traveled), 7),
+    tz_total_30days = roll_sum(abs(tz_traveled), 30),
+
+    # Number of time zones traveled East (sum of positive values)
+    tz_east_3days = roll_sum(if_else(tz_traveled > 0, abs(tz_traveled), 0), 3),
+    tz_east_7days = roll_sum(if_else(tz_traveled > 0, abs(tz_traveled), 0), 7),
+    tz_east_30days = roll_sum(if_else(tz_traveled > 0, abs(tz_traveled), 0), 30),
+
+    # Number of time zones traveled West (sum of negative values)
+    tz_west_3days = roll_sum(if_else(tz_traveled < 0, abs(tz_traveled), 0), 3),
+    tz_west_7days = roll_sum(if_else(tz_traveled < 0, abs(tz_traveled), 0), 7),
+    tz_west_30days = roll_sum(if_else(tz_traveled < 0, abs(tz_traveled), 0), 30)
+  ) %>%
+  ungroup()
+
+df_metrics <- df_metrics %>%
+  # Return to the original format with implicit missing dates
+  filter(!is.na(games_played)) %>%
+  # Remove temporary indicators:
+  select(-games_played, -road_game)
+```
+
+Calculate the first game of an interconference road trip:
+
+```{r}
+df_metrics <- df_metrics %>%
+  group_by(game_id) %>%
+  mutate(interconference = as.numeric(first(conference) != last(conference))) %>%
+  ungroup() %>%
+  group_by(team) %>%
+  mutate(
+    first_interconf_trip = if_else(
+      (interconference == 1) & (lag(interconference) == 0) & (home_team == 0),
+      1, 0
+    ),
+    first_interconf_trip = if_else(is.na(first_interconf_trip) & (home_team == 0), 1, 0)
+  ) %>%
+  ungroup()
+```
+
+Then we calculate performance metrics, again on a rolling basis, as the mean of 40 last games, which may span severeal seasons:
+
+```{r}
+df_metrics <- df_metrics %>%
+  # Group all games by team, irrespective of the season
+  group_by(team) %>%
+  arrange(date, .by_group = TRUE) %>%
+  # Compute average performance metrics for the past 40 games (excluding the current game)
+  mutate(
+    pace_40games = lag(roll_mean(pace, 40)),
+    ftr_40games = lag(roll_mean(free_throw_rate, 40)),
+    tpar_40games = lag(roll_mean(three_pt_att_rate, 40)),
+    ts_40games = lag(roll_mean(true_shooting_pct, 40)),
+    trb_40games = lag(roll_mean(total_rebound_pct, 40)),
+    steal_40games = lag(roll_mean(team_steal_pct, 40)),
+    block_40games = lag(roll_mean(team_block_pct, 40)),
+    efg_40games = lag(roll_mean(effective_fg_pct, 40)),
+    tov_40games = lag(roll_mean(turnovers_per100, 40)),
+    orb_40games = lag(roll_mean(off_rebound_pct, 40)),
+    drb_40games = lag(roll_mean(def_rebound_pct, 40)),
+    pyth_40games = lag(roll_sum(points, 40)^14 / (roll_sum(points, 40)^14 + roll_sum(points_opp, 40)^14))
+  ) %>%
+  ungroup() %>%
+  # We are unable to calculate the average for the very first game in 2000-01 season.
+  # Impute these missing values with the mean for the very first season.
+  group_by(season, team) %>%
+  mutate(
+    pace_40games = replace_na(pace_40games, mean(pace_40games, na.rm = TRUE)),
+    ftr_40games = replace_na(ftr_40games, mean(ftr_40games, na.rm = TRUE)),
+    tpar_40games = replace_na(tpar_40games, mean(tpar_40games, na.rm = TRUE)),
+    ts_40games = replace_na(ts_40games, mean(ts_40games, na.rm = TRUE)),
+    trb_40games = replace_na(trb_40games, mean(trb_40games, na.rm = TRUE)),
+    steal_40games = replace_na(steal_40games, mean(steal_40games, na.rm = TRUE)),
+    block_40games = replace_na(block_40games, mean(block_40games, na.rm = TRUE)),
+    efg_40games = replace_na(efg_40games, mean(efg_40games, na.rm = TRUE)),
+    tov_40games = replace_na(tov_40games, mean(tov_40games, na.rm = TRUE)),
+    orb_40games = replace_na(orb_40games, mean(orb_40games, na.rm = TRUE)),
+    drb_40games = replace_na(drb_40games, mean(drb_40games, na.rm = TRUE)),
+    pyth_40games = replace_na(pyth_40games, mean(pyth_40games[1:6], na.rm = TRUE))
+  ) %>%
+  ungroup()
+```
+
+Compute a 1-season lagged total number of wins for each team. Missing values for the very first season (2000-01) are imputed with a mean value of the following five seasons. Missing value for Vancouver Grizzlies, which played for a single season in our dataset are imputed with a mean of all teams.
+
+```{r warning=FALSE, message=FALSE}
+total_season_wins <- df_metrics %>%
+  group_by(team, season) %>%
+  arrange(season, .by_group = TRUE) %>%
+  summarise(total_wins = sum(win)) %>%
+  mutate(
+    total_wins_ly = lag(total_wins),
+    total_wins_ly = replace_na(total_wins_ly, mean(total_wins_ly[2:6], na.rm = TRUE))
+  ) %>%
+  ungroup() %>%
+  mutate(total_wins_ly = if_else(is.nan(total_wins_ly), mean(total_wins_ly, na.rm = T), total_wins_ly)) %>%
+  select(-total_wins)
+
+df_metrics <- df_metrics %>%
+  left_join(total_season_wins, by = c("team", "season"))
+```
+
+Remove the original performance metrics, since those cannot be used as is for training the model:
+
+```{r}
+df_metrics <- df_metrics %>%
+  select(
+    -pace, -free_throw_rate, -three_pt_att_rate, -true_shooting_pct,
+    -total_rebound_pct, -team_steal_pct, -team_block_pct, -effective_fg_pct,
+    -turnovers_per100, -off_rebound_pct, -def_rebound_pct,
+    -points_opp,
+    -all_nba, -first_team_nba, -second_team_nba, -third_team_nba
+  )
+```
+
+Perform simple random assignment of each team in each game to the "observed" and the "baseline" team. This makes observations in the two groups independent, and allows for inclusion of a conference dummy into a regression:
+
+```{r warning=FALSE}
+# The seed is chosen such that the number of Eastern and Western conferences
+# within the observed (and the baseline) group is equal for the whole dataset.
+RNGkind(sample.kind = "Rounding")  # consistent results for R ver. < / >= 3.6.0
+set.seed(52)
+df_metrics <- df_metrics %>%
+  group_by(game_id) %>%
+  # Randomly assign an "observed" team
+  mutate(observed_team = sample(c(0, 1)))
+```
+
+Save the resulting dataframe, two rows per game, one for each team:
+
+```{r warning=FALSE, message=FALSE}
+sorted_columns <- c(
+  # Basic game info
+  "game_id", "season", "team", "date", "playoff", "conference", "interconference",
+  "home_team", "observed_team",
+
+  # Outcome variables
+  "win", "points",
+
+  # Travel: technical attributes used to computate the statistics and perform
+  # quality checks of the data
+  "previous_location", "current_location", "longitude", "utc_offset",
+  "direct_distance", "driving_distance", "driving_hours",
+
+  # Travel: distance
+  "dist_traveled", "dist_3days", "dist_7days", "dist_30days",
+  "lon_traveled", "direction", "first_interconf_trip",
+
+  # Travel: time zone info
+  "tz_traveled", "same_tz_3days", "same_tz_7days", "same_tz_30days",
+  "tz_total_3days", "tz_total_7days", "tz_total_30days",
+  "tz_east_3days", "tz_east_7days", "tz_east_30days",
+  "tz_west_3days", "tz_west_7days", "tz_west_30days",
+
+  # Schedule-related attributes
+  "days_rest", "second_backtoback", "three_in_four", "games_2days", "games_3days",
+  "games_4days", "games_7days", "games_30days", "road_3days", "road_7days", "road_30days",
+
+  # Team performance
+  "total_wins_ly", "pyth_40games", "pace_40games", "ftr_40games", "tpar_40games", "ts_40games",
+  "trb_40games", "steal_40games", "block_40games", "efg_40games", "tov_40games", "orb_40games",
+  "drb_40games",
+
+  # All-NBA awards data
+  "all_nba_ly", "first_team_nba_ly", "second_team_nba_ly", "third_team_nba_ly"
+)
+
+df_metrics %>%
+  select(sorted_columns) %>%
+  write_csv("../data/statistics.csv")
+```
+
+# Calculate differentials
+
+Alternatively, to assess the advantage of one conference over the other, we can look at the differentials for each metric for a randomly assigned "observed" team minus a "baseline" team. Below we will filter out the games played within the same conference and combine the indicators for the two competing teams into their differentials:
+
+```{r}
+# Differentials to compute
+metrics <- vars(
+  # Outcome differentials
+  win, points,
+
+  # Dummy variables: home_team and conference are 0/1 variables for the "observed" team,
+  # while first_interconf_trip is a differential taking values of {-1, 0, 1}
+  home_team, conference, first_interconf_trip,
+
+  # Travel-related differentials: distance, longitude, time zone
+  dist_traveled, dist_3days, dist_7days, dist_30days, lon_traveled,
+  tz_traveled, same_tz_3days, same_tz_7days, same_tz_30days,
+  tz_total_3days, tz_total_7days, tz_total_30days,
+  tz_east_3days, tz_east_7days, tz_east_30days,
+  tz_west_3days, tz_west_7days, tz_west_30days,
+
+  # Schedule-related differentials
+  days_rest, second_backtoback, three_in_four,
+  games_2days, games_3days, games_4days, games_7days, games_30days,
+  road_3days, road_7days, road_30days,
+
+  #  Team performance
+  total_wins_ly, pyth_40games,
+  pace_40games, ftr_40games, tpar_40games, ts_40games,
+  trb_40games, steal_40games, block_40games, efg_40games,
+  tov_40games, orb_40games, drb_40games,
+
+  # All-NBA awards
+  all_nba_ly, first_team_nba_ly, second_team_nba_ly, third_team_nba_ly
+)
+
+df_diff <- df_metrics %>%
+  # Include only interconference games
+  filter(interconference == 1) %>%
+  group_by(game_id) %>%
+  # Temporary recode conference dummy to enable computation
+  mutate(conference = if_else(conference == "W", 1, 0)) %>%
+  # Compute the differentials
+  arrange(observed_team, .by_group = TRUE) %>%
+  summarise_at(metrics, diff) %>%
+  mutate(
+    # Fix the dummies, which are now 1 and -1
+    win = as.numeric(win > 0),
+    home_team = as.numeric(home_team > 0),
+    conference = if_else(conference > 0, "W", "E")
+  )
+
+# Join with basic game info: season, date, hour of the game
+df_diff <- df_metrics %>%
+  select(game_id, season, date, playoff) %>%
+  distinct() %>%
+  right_join(df_diff, by = "game_id")
+```
+
+Finally, we save the result:
+
+```{r}
+df_diff %>%
+  arrange(game_id) %>%
+  write_csv("../data/differentials.csv")
+```
+
+
+

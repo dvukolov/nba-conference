@@ -1,0 +1,239 @@
+---
+title: "Regression Analysis"
+output: html_document
+date: "May 4, 2019"
+---
+
+```{r, message=FALSE}
+library(car)
+library(moderndive)
+library(nortest)
+library(progress)
+library(tidyverse)
+```
+
+```{r message=FALSE}
+differentials <- read_csv("../data/differentials.csv")
+```
+
+
+# Model 1: Assessing Conference Advantage
+
+## The full model
+
+```{r}
+df <- differentials[, c(6, 8, 39:51)]
+full_model <- lm(points ~ ., data = df)
+summary(full_model)
+```
+
+## The reduced model with only significant predictors
+
+```{r}
+reduced_model <- lm(points ~ conference + total_wins_ly + pyth_40games +
+  tpar_40games + steal_40games + drb_40games, data = df)
+summary(reduced_model)
+```
+
+## The partial F-test
+
+```{r}
+anova(full_model, reduced_model)
+```
+
+```{r}
+get_regression_table(reduced_model, print = TRUE)
+```
+
+# Model 2. Evaluating the Effect of Travel and Schedule
+
+## The full model
+
+```{r model2, cache=TRUE}
+df <- differentials %>% select(-game_id, -win)
+full_model <- lm(points ~ . + conference * ., data = df)
+stepwise_model <- step(full_model, trace = FALSE)
+summary(stepwise_model)
+```
+
+## The reduced model with four variables dropped simultaneously (based on a partial F-test)
+
+```{r}
+reduced_model <- update(stepwise_model, . ~ . - playoff - playoff:conference
+  - tz_total_7days - conference:second_backtoback)
+summary(reduced_model)
+```
+
+## The partial F-test
+
+```{r}
+anova(stepwise_model, reduced_model)
+```
+
+## The resulting minimal model with all significant predictors (covariates with the largest VIFs dropped, and predictors removed one at a time based on the highest p-values)
+
+We check the variance inflation factors, drop the predictors with the highest values and continue to manually remove any explanatory variable whose p-value is above 0.05 *one at a time*. The resulting model is listed below:
+
+```{r}
+minimal_model <- update(reduced_model, . ~ . - tz_traveled - lon_traveled
+  - tz_east_30days - conference:tz_east_30days
+  - conference:tz_total_30days)
+summary(minimal_model)
+```
+
+```{r}
+get_regression_table(minimal_model, digits = 4, print = TRUE)
+```
+
+# Diagnostics 
+
+## Testing assumptions of linear regression
+
+```{r fig.width=10, fig.height=7}
+old.par <- par(mfrow = c(2, 2), mar = c(5, 4, 2, 2))
+plot(minimal_model, lwd = 2)
+par(old.par)
+```
+
+```{r message=FALSE, echo=FALSE}
+pdf(file = "../img/diag.pdf", width = 9.75)
+old.par <- par(mfrow = c(2, 2), mar = c(5, 4, 2, 2))
+plot(minimal_model, lwd = 2)
+par(old.par)
+dev.off()
+```
+
+## Variance Inflation Factors: testing for multicollinearity
+
+```{r}
+vif(minimal_model)
+```
+
+## Breusch-Pagan test for heteroskedasticity
+
+```{r}
+ncvTest(minimal_model)
+```
+
+## Anderson-Darling test for normality
+
+```{r}
+ad.test(residuals(minimal_model))
+```
+
+## Durbin-Watson test for independence
+
+```{r}
+set.seed(0)
+durbinWatsonTest(minimal_model)
+```
+
+# Bootstrap
+
+```{r}
+df <- differentials %>% select(-game_id, -win)
+
+covariates <- list(
+  basic = c("conference", "home_team", "playoff"),
+  travel = names(df)[c(2, 7:36)],
+  performance = names(df)[37:53]
+)
+
+create_formula <- function(covariates, interaction = TRUE) {
+  basic <- paste(covariates$basic, collapse = " + ")
+  travel <- paste(covariates$travel, collapse = " + ")
+  if (interaction) {
+    interaction <- sprintf("conference * (%s)", travel)
+  } else {
+    interaction <- NULL
+  }
+  performance <- paste(covariates$performance, collapse = " + ")
+  predictors <- paste(c(basic, travel, interaction, performance),
+    collapse = " + "
+  )
+  as.formula(paste("points ~", predictors))
+}
+
+step_significant <- function(formula, data) {
+  fit <- lm(formula, data = data)
+  fit <- step(fit, trace = FALSE)
+  pvalues <- coef(summary(fit))[, 4]
+  while (any(pvalues > 0.05)) {
+    removal_candidate <- names(which.max(pvalues))
+    removal_candidate <- sub(":", ".", removal_candidate)
+    df <- data.frame(model.matrix(fit)[, -1])
+    df$points <- data$points
+    interaction <- paste0("conferenceW.", removal_candidate)
+    df <- df[, -which(names(df) %in% c(removal_candidate, interaction))]
+    fit <- lm(points ~ ., data = df)
+    pvalues <- coef(summary(fit))[, 4]
+  }
+  names(coef(fit))[-1]
+}
+```
+
+```{r bootstrap, cache=TRUE}
+bootstrap <- function(n_iterations) {
+  set.seed(0)
+  n <- nrow(df)
+  counter <- c()
+  model_formula <- create_formula(covariates)
+  
+  pb <- progress_bar$new(total = n_iterations, clear = FALSE, width= 60,
+                         format = "[:bar] :percent :elapsedfull eta: :eta")
+  pb$tick(0)
+  
+  for (i in seq_len(n_iterations)) {
+    train <- sample(n, n, replace = TRUE)
+    try(
+      {
+        predictors <<- step_significant(model_formula, data = df[train, ])
+      },
+      silent = TRUE
+    )
+    for (predictor in predictors) {
+      if (predictor %in% names(counter)) {
+        counter[predictor] <- counter[predictor] + 1
+      } else {
+        counter[predictor] <- 1
+      }
+    }
+    pb$tick()
+  }
+  
+  enframe(counter) %>%
+    mutate(
+      percent = value / n_iterations,
+      name = sub("\\.", ":", name)
+    )
+}
+
+results <- bootstrap(n_iterations = 100)
+```
+
+```{r}
+n_iterations <- max(results$value)
+p <- results %>%
+  mutate(
+    percent = value / n_iterations,
+    name = sub("\\.", ":", name)
+  ) %>%
+  filter(
+    !(name %in% covariates$performance),
+    percent >= 0.25
+  ) %>%
+  ggplot(aes(fct_rev(name), percent)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = NULL, y = "Probability")
+p + ggtitle("Predictor Probability of Being Included in the Model")
+```
+
+```{r, include=FALSE, eval=TRUE}
+ggsave(file = "../img/bootstrap.pdf", plot = p, height = 6)
+```
+
+```{r}
+results %>% write_csv("../data/bootstrap.csv")
+```
